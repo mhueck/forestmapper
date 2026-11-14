@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">GeoPDF Mapper</string>
+    <string name="select_geopdf_map">Select GeoPDF Map</string>
+    <string name="no_map_loaded">Select Map...</string>
+    <string name="import_pdf">Import PDF</string>
+    <string name="rescan">Rescan Folder</string>
+    <string name="sim_gps">Sim GPS</string>
+    <string name="stop_sim_gps">Stop Sim</string>
+    <string name="zoom_in">Zoom In</string>
+    <string name="zoom_out">Zoom Out</string>
+    <string name="recenter_gps">Re-center</string>
+    <string name="following_gps">Centered</string>
+    <string name="cancel_download">Cancel</string>
+    <string name="settings">Settings</string>
+</resources>

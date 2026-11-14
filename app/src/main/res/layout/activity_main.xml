@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1B2228">
+
+    <!-- Interactive GeoPDF Map Canvas View -->
+    <com.mapper.geopdf.ui.GeoPdfMapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Top Control Bar -->
+    <LinearLayout
+        android:id="@+id/topControlBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_margin="12dp"
+        android:background="#CC161C22"
+        android:elevation="6dp"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelectMap"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/select_geopdf_map"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                app:icon="@drawable/ic_map"
+                app:iconTint="#64B5F6"
+                app:strokeColor="#64B5F6" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnImportPdf"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/import_pdf"
+                android:textAllCaps="false"
+                android:textColor="#90CAF9" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSimulateGps"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="@string/sim_gps"
+                android:textAllCaps="false"
+                android:textColor="#81C784" />
+
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="2dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings"
+                android:padding="6dp"
+                android:src="@drawable/ic_settings"
+                android:tint="#B0BEC5" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvStatusBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/app_name"
+            android:textColor="#B0BEC5"
+            android:textSize="12sp" />
+
+        <LinearLayout
+            android:id="@+id/layoutDownloadProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/progressDownload"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="100"
+                android:progressTint="#64B5F6" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelDownload"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:layout_marginStart="6dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="0dp"
+                android:text="@string/cancel_download"
+                android:textAllCaps="false"
+                android:textColor="#EF9A9A"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Right-side Map Zoom & Re-center Controls -->
+    <LinearLayout
+        android:id="@+id/bottomControls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="24dp"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabZoomIn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:contentDescription="@string/zoom_in"
+            android:src="@drawable/ic_zoom_in"
+            app:backgroundTint="#263238"
+            app:fabSize="mini"
+            app:tint="#FFFFFF" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fabZoomOut"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            android:contentDescription="@string/zoom_out"
+            android:src="@drawable/ic_zoom_out"
+            app:backgroundTint="#263238"
+            app:fabSize="mini"
+            app:tint="#FFFFFF" />
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/fabRecenter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/following_gps"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            app:backgroundTint="#007AFF"
+            app:icon="@drawable/ic_my_location"
+            app:iconTint="#FFFFFF" />
+    </LinearLayout>
+
+</FrameLayout>

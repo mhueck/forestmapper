@@ -1,0 +1,26 @@
+# Gradle & Kotlin build caches
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# Local SDK / IDE configuration
+local.properties
+.idea/
+*.iml
+.cxx/
+captures/
+.navigation/
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Local sample GeoPDFs (downloaded automatically on-demand via forest_catalog.json)
+maps/*.pdf
+
+# OS artifacts
+.DS_Store
+Thumbs.db
