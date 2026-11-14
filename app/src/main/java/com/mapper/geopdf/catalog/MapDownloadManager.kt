@@ -3,6 +3,7 @@ package com.mapper.geopdf.catalog
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.mapper.geopdf.geo.DistanceUnit
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
 import com.mapper.geopdf.geo.GeoPdfParser
 import kotlinx.coroutines.CancellationException
@@ -278,6 +279,7 @@ class MapDownloadManager(
         private const val PREFS_NAME = "geo_pdf_catalog_prefs"
         private const val KEY_AUTO_DOWNLOAD = "auto_download_enabled"
         private const val KEY_WIFI_ONLY = "wifi_only_download"
+        private const val KEY_DISTANCE_UNIT = "distance_unit"
         private const val KEY_CATALOG_PREFIX = "catalog_"
         private const val KEY_PINNED_PREFIX = "pinned_"
         private const val KEY_AUTO_PREFIX = "auto_"
@@ -311,6 +313,11 @@ class MapDownloadManager(
     private val _wifiOnlyDownload = MutableStateFlow(prefs.getBoolean(KEY_WIFI_ONLY, false))
     val wifiOnlyDownload: StateFlow<Boolean> = _wifiOnlyDownload.asStateFlow()
 
+    private val _distanceUnit = MutableStateFlow(
+        DistanceUnit.fromPref(prefs.getString(KEY_DISTANCE_UNIT, null))
+    )
+    val distanceUnit: StateFlow<DistanceUnit> = _distanceUnit.asStateFlow()
+
     suspend fun loadCatalog(): ForestCatalog = withContext(Dispatchers.IO) {
         try {
             appContext.assets.open("forest_catalog.json").use { stream ->
@@ -335,6 +342,11 @@ class MapDownloadManager(
         if (wifiOnly && _activeDownload.value?.isAutomatic == true && checkNetworkEligibility() == NetworkEligibility.WIFI_REQUIRED) {
             cancelActiveDownload()
         }
+    }
+
+    fun setDistanceUnit(unit: DistanceUnit) {
+        prefs.edit().putString(KEY_DISTANCE_UNIT, unit.prefValue).apply()
+        _distanceUnit.value = unit
     }
 
     fun checkNetworkEligibility(): NetworkEligibility {

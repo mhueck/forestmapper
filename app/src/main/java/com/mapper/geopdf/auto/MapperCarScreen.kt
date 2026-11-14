@@ -36,6 +36,7 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
     private var surface: Surface? = null
     private var surfaceWidth: Int = 0
     private var surfaceHeight: Int = 0
+    private var visibleArea: Rect? = null
     private var isInPanMode: Boolean = false
 
     private val redrawListener: () -> Unit = {
@@ -56,6 +57,9 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
         }
 
         override fun onVisibleAreaChanged(visibleArea: Rect) {
+            synchronized(this@MapperCarScreen) {
+                this@MapperCarScreen.visibleArea = Rect(visibleArea)
+            }
             renderSurface()
         }
 
@@ -126,10 +130,13 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
         synchronized(this) {
             val s = surface ?: return
             if (!s.isValid || surfaceWidth <= 0 || surfaceHeight <= 0) return
+            val area = visibleArea
+            val leftInset = area?.left?.takeIf { it in 1..(surfaceWidth / 3) } ?: 0
+            val bottomInset = area?.let { surfaceHeight - it.bottom }?.takeIf { it in 1..(surfaceHeight / 3) } ?: 0
             try {
                 val canvas = s.lockCanvas(null) ?: return
                 try {
-                    mapController.renderToCanvas(canvas, surfaceWidth, surfaceHeight)
+                    mapController.renderToCanvas(canvas, surfaceWidth, surfaceHeight, leftInset, bottomInset)
                 } finally {
                     s.unlockCanvasAndPost(canvas)
                 }

@@ -9,8 +9,11 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
+import com.mapper.geopdf.geo.GeoViewport
+import com.mapper.geopdf.geo.MapScaleFormatter
 import com.mapper.geopdf.state.MapUiState
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * Renders the local GPS position, directional movement arrow, accuracy halo, and scale bar
@@ -75,7 +78,28 @@ object MapOverlayRenderer {
         textSize = 21f
     }
 
+    private val scaleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 22f
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val scaleLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3.2f
+        strokeCap = Paint.Cap.SQUARE
+        strokeJoin = Paint.Join.MITER
+        color = Color.WHITE
+    }
+
     private val arrowPath = Path()
+    private val scaleBracketPath = Path()
+    private val scaleCacheLock = Any()
+    private var cachedViewport: GeoViewport? = null
+    private var cachedPageX: Float = 0f
+    private var cachedPageY: Float = 0f
+    private var cachedGroundMetersPerPt: Double = 0.0
 
     fun drawOverlays(
         canvas: Canvas,
@@ -86,7 +110,38 @@ object MapOverlayRenderer {
         extraLeftInsetPx: Int = 0,
         extraBottomInsetPx: Int = 0
     ) {
-        val gps = state.gpsPosition ?: return
+        val hudBoxTop = drawGpsOverlaysAndHud(
+            canvas = canvas,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            mapInfo = mapInfo,
+            state = state,
+            extraLeftInsetPx = extraLeftInsetPx,
+            extraBottomInsetPx = extraBottomInsetPx
+        )
+
+        drawScaleBar(
+            canvas = canvas,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            viewport = mapInfo.primaryViewport,
+            state = state,
+            extraLeftInsetPx = extraLeftInsetPx,
+            extraBottomInsetPx = extraBottomInsetPx,
+            hudBoxTop = hudBoxTop
+        )
+    }
+
+    private fun drawGpsOverlaysAndHud(
+        canvas: Canvas,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        mapInfo: GeoPdfDocumentInfo,
+        state: MapUiState,
+        extraLeftInsetPx: Int,
+        extraBottomInsetPx: Int
+    ): Float? {
+        val gps = state.gpsPosition ?: return null
         val viewport = mapInfo.primaryViewport
 
         // Convert GPS (lat, lon) to PDF page point, then to screen pixel
@@ -141,7 +196,7 @@ object MapOverlayRenderer {
 
         // 3. Draw compact bottom-left GPS & heading pill (visible on both Phone and Android Auto)
         val cardinal = bearingToCardinal(gps.bearingDegrees)
-        val speedMph = gps.speedMetersPerSec * 2.23694f
+        val speedText = MapScaleFormatter.formatSpeed(gps.speedMetersPerSec, state.distanceUnit)
         val line1 = String.format(
             Locale.US,
             "%.5f°, %.5f°  •  %s (%.0f°)",
@@ -152,8 +207,8 @@ object MapOverlayRenderer {
         )
         val line2 = String.format(
             Locale.US,
-            "%.1f mph  •  %s  •  %s",
-            speedMph,
+            "%s  •  %s  •  %s",
+            speedText,
             if (state.isFollowingGps) "FOLLOWING GPS" else "FREE PAN (Tap Re-center)",
             if (gps.isSimulated) "SIMULATED GPS" else "LIVE GPS"
         )
@@ -169,6 +224,88 @@ object MapOverlayRenderer {
         canvas.drawRoundRect(rect, 16f, 16f, hudBgPaint)
         canvas.drawText(line1, boxLeft + pad, boxTop + 32f, hudTextPaint)
         canvas.drawText(line2, boxLeft + pad, boxTop + 60f, hudSubTextPaint)
+        return boxTop
+    }
+
+    private fun drawScaleBar(
+        canvas: Canvas,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        viewport: GeoViewport,
+        state: MapUiState,
+        extraLeftInsetPx: Int,
+        extraBottomInsetPx: Int,
+        hudBoxTop: Float?
+    ) {
+        if (viewportWidth <= 0 || viewportHeight <= 0 || state.scale <= 0f) return
+
+        val safeScale = state.scale.coerceAtLeast(1e-4f)
+        val centerPageX = ((viewportWidth * 0.5f - state.offsetX) / safeScale)
+            .coerceIn(viewport.bboxPage.left, viewport.bboxPage.right)
+        val centerPageY = ((viewportHeight * 0.5f - state.offsetY) / safeScale)
+            .coerceIn(viewport.bboxPage.top, viewport.bboxPage.bottom)
+
+        val groundMetersPerPt = resolveGroundMetersPerPoint(viewport, centerPageX, centerPageY)
+        val groundMetersPerPx = groundMetersPerPt / safeScale.toDouble()
+        val maxBarWidthPx = (viewportWidth * 0.22f).coerceIn(100f, 220f)
+        val spec = MapScaleFormatter.computeScaleBar(
+            groundMetersPerPx = groundMetersPerPx,
+            unit = state.distanceUnit,
+            maxWidthPx = maxBarWidthPx
+        ) ?: return
+
+        val padX = 16f
+        val labelWidth = scaleTextPaint.measureText(spec.label)
+        val contentWidth = maxOf(spec.widthPx, labelWidth)
+        val pillLeft = 24f + extraLeftInsetPx
+        val pillRight = (pillLeft + contentWidth + padX * 2f).coerceAtMost(viewportWidth - 24f)
+        if (pillRight <= pillLeft + padX * 2f) return
+
+        val pillBottom = hudBoxTop?.let { it - 10f } ?: (viewportHeight - 24f - extraBottomInsetPx)
+        val pillTop = pillBottom - 48f
+        if (pillTop < 0f) return
+
+        canvas.drawRoundRect(RectF(pillLeft, pillTop, pillRight, pillBottom), 12f, 12f, hudBgPaint)
+
+        val centerX = (pillLeft + pillRight) * 0.5f
+        canvas.drawText(spec.label, centerX, pillTop + 22f, scaleTextPaint)
+
+        val barWidthPx = minOf(spec.widthPx, (pillRight - pillLeft - padX * 2f).coerceAtLeast(10f))
+        val barLeft = centerX - barWidthPx * 0.5f
+        val barRight = barLeft + barWidthPx
+        val barBottomY = pillBottom - 10f
+        val tickTopY = barBottomY - 8f
+
+        scaleBracketPath.reset()
+        scaleBracketPath.moveTo(barLeft, tickTopY)
+        scaleBracketPath.lineTo(barLeft, barBottomY)
+        scaleBracketPath.lineTo(barRight, barBottomY)
+        scaleBracketPath.lineTo(barRight, tickTopY)
+        canvas.drawPath(scaleBracketPath, scaleLinePaint)
+    }
+
+    private fun resolveGroundMetersPerPoint(
+        viewport: GeoViewport,
+        pageX: Float,
+        pageY: Float
+    ): Double {
+        synchronized(scaleCacheLock) {
+            if (cachedViewport === viewport &&
+                abs(pageX - cachedPageX) <= 24f &&
+                abs(pageY - cachedPageY) <= 24f &&
+                cachedGroundMetersPerPt > 0.0
+            ) {
+                return cachedGroundMetersPerPt
+            }
+        }
+        val computed = viewport.groundMetersPerPointAt(pageX, pageY)
+        synchronized(scaleCacheLock) {
+            cachedViewport = viewport
+            cachedPageX = pageX
+            cachedPageY = pageY
+            cachedGroundMetersPerPt = computed
+        }
+        return computed
     }
 
     private val emptyStateTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {

@@ -160,6 +160,25 @@ data class GeoViewport(
         return Math.toDegrees(atan2(dx, -dy)).toFloat()
     }
 
+    /**
+     * Computes true geodesic ground meters per PDF page point horizontally around ([pageX], [pageY]).
+     * Compensates cleanly for Mercator latitude scaling, conic convergence, and geographic fallback.
+     */
+    fun groundMetersPerPointAt(
+        pageX: Float = bboxPage.centerX(),
+        pageY: Float = bboxPage.centerY()
+    ): Double {
+        val deltaPt = 20f
+        val (lat1, lon1) = pageToLatLon(pageX - deltaPt, pageY)
+        val (lat2, lon2) = pageToLatLon(pageX + deltaPt, pageY)
+        if (!lat1.isFinite() || !lon1.isFinite() || !lat2.isFinite() || !lon2.isFinite()) {
+            return metersPerPoint
+        }
+        val distMeters = MapScaleFormatter.haversineMeters(lat1, lon1, lat2, lon2)
+        val perPt = distMeters / (2.0 * deltaPt)
+        return if (perPt.isFinite() && perPt > 0.0) perPt else metersPerPoint
+    }
+
     companion object {
         /**
          * Solves least-squares 2D affine transform:

@@ -12,6 +12,7 @@ import com.mapper.geopdf.catalog.ForestCatalog
 import com.mapper.geopdf.catalog.MapDownloadManager
 import com.mapper.geopdf.catalog.MapDownloadService
 import com.mapper.geopdf.catalog.NetworkEligibility
+import com.mapper.geopdf.geo.DistanceUnit
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
 import com.mapper.geopdf.geo.GeoPdfParser
 import com.mapper.geopdf.location.GpsPosition
@@ -49,7 +50,8 @@ data class MapUiState(
     val nearbyMissingCatalogMaps: List<CatalogMapEntry> = emptyList(),
     val activeDownload: ActiveDownload? = null,
     val autoDownloadEnabled: Boolean = true,
-    val wifiOnlyDownload: Boolean = false
+    val wifiOnlyDownload: Boolean = false,
+    val distanceUnit: DistanceUnit = DistanceUnit.defaultForLocale()
 )
 
 /**
@@ -90,7 +92,8 @@ class MapController(private val appContext: Context) {
     private val _uiState: MutableStateFlow<MapUiState> = MutableStateFlow(
         MapUiState(
             autoDownloadEnabled = downloadManager.autoDownloadEnabled.value,
-            wifiOnlyDownload = downloadManager.wifiOnlyDownload.value
+            wifiOnlyDownload = downloadManager.wifiOnlyDownload.value,
+            distanceUnit = downloadManager.distanceUnit.value
         )
     )
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -155,6 +158,15 @@ class MapController(private val appContext: Context) {
         scope.launch {
             downloadManager.wifiOnlyDownload.collect { wifiOnly ->
                 _uiState.value = _uiState.value.copy(wifiOnlyDownload = wifiOnly)
+            }
+        }
+
+        scope.launch {
+            downloadManager.distanceUnit.collect { unit ->
+                if (_uiState.value.distanceUnit != unit) {
+                    _uiState.value = _uiState.value.copy(distanceUnit = unit)
+                    notifyRedraw()
+                }
             }
         }
 
@@ -681,6 +693,10 @@ class MapController(private val appContext: Context) {
         if (!wifiOnly && pos != null && initialScanCompleted) {
             evaluateAutoDownloadForGps(pos)
         }
+    }
+
+    fun setDistanceUnit(unit: DistanceUnit) {
+        downloadManager.setDistanceUnit(unit)
     }
 
     fun cancelActiveDownload() {

@@ -31,7 +31,9 @@ import com.mapper.geopdf.R
 import com.mapper.geopdf.catalog.ActiveDownload
 import com.mapper.geopdf.catalog.CatalogMapEntry
 import com.mapper.geopdf.databinding.ActivityMainBinding
+import com.mapper.geopdf.geo.DistanceUnit
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
+import com.mapper.geopdf.geo.MapScaleFormatter
 import com.mapper.geopdf.state.MapController
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -239,9 +241,14 @@ class MainActivity : AppCompatActivity() {
 
         for (entry in state.nearbyMissingCatalogMaps.take(6)) {
             if (entry.id == activeDl?.mapId) continue
-            val distKm = gps?.let { entry.bbox.distanceKmTo(it.latitude, it.longitude).roundToInt() } ?: 0
+            val distText = gps?.let {
+                MapScaleFormatter.formatDistanceShort(
+                    entry.bbox.distanceKmTo(it.latitude, it.longitude),
+                    state.distanceUnit
+                )
+            } ?: "0"
             rows.add(PickerRow.RemoteMap(entry, isAtGps = false))
-            labels.add("⬇ ${entry.mapName} (${entry.fileSizeMbText()})  [${distKm} km away]")
+            labels.add("⬇ ${entry.mapName} (${entry.fileSizeMbText()})  [$distText away]")
         }
 
         val builder = AlertDialog.Builder(this)
@@ -355,8 +362,12 @@ class MainActivity : AppCompatActivity() {
                     val isDownloadingEntry = (activeDl?.mapId == entry.id)
                     val stateTag = entry.state?.let { " • $it" } ?: ""
                     val distTag = if (gps != null) {
-                        val d = entry.bbox.distanceKmTo(gps.latitude, gps.longitude).roundToInt()
-                        if (d == 0 && entry.containsPoint(gps.latitude, gps.longitude)) " • At GPS" else " • ${d} km"
+                        val dKm = entry.bbox.distanceKmTo(gps.latitude, gps.longitude)
+                        if (dKm.roundToInt() == 0 && entry.containsPoint(gps.latitude, gps.longitude)) {
+                            " • At GPS"
+                        } else {
+                            " • ${MapScaleFormatter.formatDistanceShort(dKm, curState.distanceUnit)}"
+                        }
                     } else {
                         ""
                     }
@@ -420,19 +431,24 @@ class MainActivity : AppCompatActivity() {
         val stats = mapController.getAutoCacheStats()
         val options = arrayOf(
             "Auto-download map for current GPS",
-            "Download on Wi-Fi only"
+            "Download on Wi-Fi only",
+            "Use metric units (km / km/h)"
         )
         val checked = booleanArrayOf(
             state.autoDownloadEnabled,
-            state.wifiOnlyDownload
+            state.wifiOnlyDownload,
+            state.distanceUnit == DistanceUnit.KILOMETERS
         )
 
         val builder = AlertDialog.Builder(this)
-            .setTitle("Auto-Download & Cache")
+            .setTitle("Settings & Cache")
             .setMultiChoiceItems(options, checked) { _, which, isChecked ->
                 when (which) {
                     0 -> mapController.setAutoDownloadEnabled(isChecked)
                     1 -> mapController.setWifiOnlyDownload(isChecked)
+                    2 -> mapController.setDistanceUnit(
+                        if (isChecked) DistanceUnit.KILOMETERS else DistanceUnit.MILES
+                    )
                 }
             }
             .setNeutralButton(R.string.rescan) { _, _ ->
