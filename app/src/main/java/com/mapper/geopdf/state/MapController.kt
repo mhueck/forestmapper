@@ -244,7 +244,7 @@ class MapController(private val appContext: Context) {
 
     /**
      * Scans known directories on the device for GeoPDF files:
-     *  1. App-specific external folder: /Android/data/com.mapper.geopdf/files/maps
+     *  1. App-specific external folder: /Android/data/net.mhu.mapper.geopdf/files/maps
      *  2. Internal files/maps
      *  3. Public /sdcard/Maps, /sdcard/Download/maps, /sdcard/Download, /sdcard/Documents/maps
      */

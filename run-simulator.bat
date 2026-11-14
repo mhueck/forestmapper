@@ -23,4 +23,4 @@ if not "%BOOT%"=="1" (
 
 "%ADB%" install -r -g "C:\Users\mhuec\projects\mapper\app\build\outputs\apk\debug\app-debug.apk"
 "%ADB%" emu geo fix -112.4685 34.5400
-"%ADB%" shell am start -n com.mapper.geopdf/.ui.MainActivity
+"%ADB%" shell am start -n net.mhu.mapper.geopdf/com.mapper.geopdf.ui.MainActivity

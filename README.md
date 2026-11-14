@@ -42,7 +42,7 @@ adb push "maps/Coronado National Forest.pdf" /sdcard/Maps/
 adb push "maps/Prescott National Forest.pdf" /sdcard/Maps/
 adb push "maps/Tonto National Forest.pdf" /sdcard/Maps/
 ```
-The app automatically scans `/sdcard/Maps`, `/sdcard/Download`, and `/Android/data/com.mapper.geopdf/files/maps` on startup.
+The app automatically scans `/sdcard/Maps`, `/sdcard/Download`, and `/Android/data/net.mhu.mapper.geopdf/files/maps` on startup.
 
 ### Option 2: Use the In-App "Import PDF" Button
 Tap **Import PDF** in the top bar on your phone to select any `.pdf` file from device storage or cloud providers. The file is copied into the app's persistent maps library so it is immediately available in both the phone UI and Android Auto.
