@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Diagonal stream segments entering bottom-left and exiting upper-right cleanly clear of trees -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M21,79 C24,75 26,71 28,67" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M78,44 C80.5,40.5 82,35.5 87,32" />
+
+    <!-- Clean topographic contour arcs framing the three pines without touching trunks -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M24,54 C26,43 32,30 44,23" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M39,81 C53,85 69,84 81,74" />
+
+    <!-- Center tall pine -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,24.5 L59.4,35.5 L56.4,35.5 L60.8,45.5 L57.5,45.5 L62.0,55.5 L58.4,55.5 L62.6,65.5 L56.0,65.5 L56.0,71.0 L52.0,71.0 L52.0,65.5 L45.4,65.5 L49.6,55.5 L46.0,55.5 L50.5,45.5 L47.2,45.5 L51.6,35.5 L48.6,35.5 Z" />
+
+    <!-- Left pine -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M37.5,34.5 L42.4,44.5 L39.6,44.5 L43.6,53.5 L40.6,53.5 L44.8,63.0 L41.5,63.0 L45.2,71.5 L39.3,71.5 L39.3,76.5 L35.7,76.5 L35.7,71.5 L29.8,71.5 L33.5,63.0 L30.2,63.0 L34.4,53.5 L31.4,53.5 L35.4,44.5 L32.6,44.5 Z" />
+
+    <!-- Right pine -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M70.5,34.5 L75.4,44.5 L72.6,44.5 L76.6,53.5 L73.6,53.5 L77.8,63.0 L74.5,63.0 L78.2,71.5 L72.3,71.5 L72.3,76.5 L68.7,76.5 L68.7,71.5 L62.8,71.5 L66.5,63.0 L63.2,63.0 L67.4,53.5 L64.4,53.5 L68.4,44.5 L65.6,44.5 Z" />
+</vector>
