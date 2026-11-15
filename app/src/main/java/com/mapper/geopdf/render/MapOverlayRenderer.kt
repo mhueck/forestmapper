@@ -28,6 +28,15 @@ import kotlin.math.sin
  */
 object MapOverlayRenderer {
 
+    // Base GPS arrow radius increased by 20% (24f -> 28.8f, ~52x66 px) and shared across nav icons.
+    private const val NAV_ICON_RADIUS_PX = 28.8f
+    private const val NAV_ICON_WIDTH_PX = NAV_ICON_RADIUS_PX * 1.80f
+    private const val NAV_ICON_HEIGHT_PX = NAV_ICON_RADIUS_PX * 2.30f
+    private const val OFFSCREEN_ARROW_GAP_PX = 6f
+    private const val OFFSCREEN_ARROW_OUTLINE_MARGIN_PX = 4.5f
+    private const val OFFSCREEN_ARROW_CLEARANCE_PX =
+        OFFSCREEN_ARROW_GAP_PX + NAV_ICON_HEIGHT_PX + OFFSCREEN_ARROW_OUTLINE_MARGIN_PX
+
     private val accuracyFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = Color.argb(45, 25, 118, 210)
@@ -48,7 +57,7 @@ object MapOverlayRenderer {
         style = Paint.Style.STROKE
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
-        strokeWidth = 7f
+        strokeWidth = 8.4f
         color = Color.WHITE
     }
 
@@ -107,7 +116,7 @@ object MapOverlayRenderer {
 
     private val destHaloStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 5f
+        strokeWidth = 8f
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
         color = Color.WHITE
@@ -120,7 +129,7 @@ object MapOverlayRenderer {
 
     private val destDarkStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f
+        strokeWidth = 4.5f
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
         color = Color.rgb(20, 25, 31)
@@ -128,7 +137,7 @@ object MapOverlayRenderer {
 
     private val destFlagOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.8f
+        strokeWidth = 2.5f
         strokeJoin = Paint.Join.ROUND
         color = Color.rgb(20, 25, 31)
     }
@@ -140,7 +149,7 @@ object MapOverlayRenderer {
 
     private val destBorderStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2.2f
+        strokeWidth = 3f
         color = Color.rgb(255, 143, 0)
     }
 
@@ -151,7 +160,7 @@ object MapOverlayRenderer {
 
     private val destTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 22f
+        textSize = 36f
         isFakeBoldText = true
     }
 
@@ -244,12 +253,12 @@ object MapOverlayRenderer {
 
         // Velocity vector line ahead of arrow when moving
         if (gps.speedMetersPerSec >= 0.3f || gps.isSimulated) {
-            val rayLen = (36f + gps.speedMetersPerSec * 2.2f).coerceAtMost(95f)
-            canvas.drawLine(0f, -22f, 0f, -rayLen, headingRayPaint)
+            val rayLen = (43f + gps.speedMetersPerSec * 2.6f).coerceAtMost(114f)
+            canvas.drawLine(0f, -26.4f, 0f, -rayLen, headingRayPaint)
         }
 
         // Navigation chevron/arrow geometry pointing UP (0, -Y) in local rotated coordinates
-        val arrowRadius = 24f
+        val arrowRadius = NAV_ICON_RADIUS_PX
         arrowPath.reset()
         arrowPath.moveTo(0f, -arrowRadius * 1.25f) // Sharp forward tip
         arrowPath.lineTo(arrowRadius * 0.90f, arrowRadius * 1.05f) // Right wing
@@ -259,14 +268,14 @@ object MapOverlayRenderer {
 
         // Drop shadow for visibility over light map areas
         canvas.save()
-        canvas.translate(0f, 3f)
+        canvas.translate(0f, 3.5f)
         canvas.drawPath(arrowPath, shadowPaint)
         canvas.restore()
 
         // White halo border + high-visibility navigation blue fill
         canvas.drawPath(arrowPath, arrowOutlinePaint)
         canvas.drawPath(arrowPath, arrowFillPaint)
-        canvas.drawCircle(0f, 0f, 4.5f, centerDotPaint)
+        canvas.drawCircle(0f, 0f, 5.4f, centerDotPaint)
 
         canvas.restore()
 
@@ -380,14 +389,15 @@ object MapOverlayRenderer {
             MapScaleFormatter.formatDistanceMeters(meters, state.distanceUnit)
         }
 
-        val padX = 12f
-        val iconW = 18f
-        val iconH = 13f
-        val pillH = 40f
+        val padX = 18f
+        val iconW = 36f
+        val iconH = 25f
+        val iconGap = 12f
+        val pillH = 56f
         val pillW = if (distText != null) {
-            padX + iconW + 8f + destTextPaint.measureText(distText) + padX
+            padX + iconW + iconGap + destTextPaint.measureText(distText) + padX
         } else {
-            40f
+            58f
         }
 
         val placement = DestinationGuidance.computePlacement(
@@ -401,7 +411,7 @@ object MapOverlayRenderer {
             insets = insets,
             pillHalfWidthPx = pillW * 0.5f,
             pillHalfHeightPx = pillH * 0.5f,
-            arrowClearancePx = 30f
+            arrowClearancePx = OFFSCREEN_ARROW_CLEARANCE_PX
         ) ?: return
 
         when (placement) {
@@ -418,6 +428,7 @@ object MapOverlayRenderer {
                     pillH = pillH,
                     iconW = iconW,
                     iconH = iconH,
+                    iconGap = iconGap,
                     padX = padX,
                     distText = distText
                 )
@@ -427,33 +438,33 @@ object MapOverlayRenderer {
 
     private fun drawCheckeredFlag(canvas: Canvas, x: Float, y: Float) {
         // Anchor dot at exact selected map coordinate
-        canvas.drawCircle(x, y + 2f, 6.5f, shadowPaint)
-        canvas.drawCircle(x, y, 6f, destHaloPaint)
-        canvas.drawCircle(x, y, 3.8f, destAccentFillPaint)
+        canvas.drawCircle(x, y + 3f, 9.5f, shadowPaint)
+        canvas.drawCircle(x, y, 9f, destHaloPaint)
+        canvas.drawCircle(x, y, 5.5f, destAccentFillPaint)
 
-        // Small tilted pole + checkered cloth rising above the anchor dot
+        // Tilted pole + checkered cloth scaled to NAV_ICON_HEIGHT_PX (~66 px)
         canvas.save()
         canvas.translate(x, y)
         canvas.rotate(-6f)
 
-        val poleTopY = -36f
-        canvas.drawLine(0f, -2f, 0f, poleTopY, destHaloStrokePaint)
-        canvas.drawLine(0f, -2f, 0f, poleTopY, destDarkStrokePaint)
+        val poleTopY = -NAV_ICON_HEIGHT_PX
+        canvas.drawLine(0f, -3f, 0f, poleTopY, destHaloStrokePaint)
+        canvas.drawLine(0f, -3f, 0f, poleTopY, destDarkStrokePaint)
 
-        val flagLeft = 1.5f
-        val flagTop = -35f
-        val flagW = 24f
-        val flagH = 16.5f
+        val flagLeft = 2.5f
+        val flagTop = poleTopY + 2f
+        val flagW = NAV_ICON_WIDTH_PX
+        val flagH = NAV_ICON_WIDTH_PX * 0.68f
 
-        val haloRect = RectF(flagLeft - 2f, flagTop - 2f, flagLeft + flagW + 2f, flagTop + flagH + 2f)
-        canvas.drawRoundRect(haloRect, 2.5f, 2.5f, shadowPaint)
-        canvas.drawRoundRect(haloRect, 2.5f, 2.5f, destHaloPaint)
+        val haloRect = RectF(flagLeft - 3f, flagTop - 3f, flagLeft + flagW + 3f, flagTop + flagH + 3f)
+        canvas.drawRoundRect(haloRect, 4f, 4f, shadowPaint)
+        canvas.drawRoundRect(haloRect, 4f, 4f, destHaloPaint)
         drawCheckeredGrid(canvas, flagLeft, flagTop, flagW, flagH, cols = 4, rows = 3)
         canvas.drawRect(flagLeft, flagTop, flagLeft + flagW, flagTop + flagH, destFlagOutlinePaint)
 
         // Top finial cap
-        canvas.drawCircle(0f, poleTopY, 3.2f, destHaloPaint)
-        canvas.drawCircle(0f, poleTopY, 2f, destDarkPaint)
+        canvas.drawCircle(0f, poleTopY, 5f, destHaloPaint)
+        canvas.drawCircle(0f, poleTopY, 3f, destDarkPaint)
         canvas.restore()
     }
 
@@ -466,6 +477,7 @@ object MapOverlayRenderer {
         pillH: Float,
         iconW: Float,
         iconH: Float,
+        iconGap: Float,
         padX: Float,
         distText: String?
     ) {
@@ -473,7 +485,8 @@ object MapOverlayRenderer {
         val halfH = pillH * 0.5f
         val pillRect = RectF(centerX - halfW, centerY - halfH, centerX + halfW, centerY + halfH)
 
-        // Directional pointer orbiting outside the horizontal badge along angleDeg
+        // Directional pointer orbiting outside the horizontal badge along angleDeg,
+        // matching the NAV_ICON_WIDTH_PX x NAV_ICON_HEIGHT_PX (~52x66 px) arrow icon size.
         val rad = Math.toRadians(angleDeg.toDouble())
         val ux = sin(rad).toFloat()
         val uy = (-cos(rad)).toFloat()
@@ -481,14 +494,19 @@ object MapOverlayRenderer {
         val ty = if (abs(uy) > 1e-4f) halfH / abs(uy) else Float.MAX_VALUE
         val edgeDist = minOf(tx, ty)
 
+        val arrowWingHalfW = NAV_ICON_WIDTH_PX * 0.5f
+        val arrowWingY = -(edgeDist + OFFSCREEN_ARROW_GAP_PX)
+        val arrowTipY = arrowWingY - NAV_ICON_HEIGHT_PX
+        val arrowNotchY = arrowWingY - NAV_ICON_HEIGHT_PX * 0.26f
+
         canvas.save()
         canvas.translate(centerX, centerY)
         canvas.rotate(angleDeg)
         destArrowPath.reset()
-        destArrowPath.moveTo(0f, -(edgeDist + 24f))
-        destArrowPath.lineTo(10.5f, -(edgeDist + 4f))
-        destArrowPath.lineTo(0f, -(edgeDist + 8.5f))
-        destArrowPath.lineTo(-10.5f, -(edgeDist + 4f))
+        destArrowPath.moveTo(0f, arrowTipY)
+        destArrowPath.lineTo(arrowWingHalfW, arrowWingY)
+        destArrowPath.lineTo(0f, arrowNotchY)
+        destArrowPath.lineTo(-arrowWingHalfW, arrowWingY)
         destArrowPath.close()
         canvas.drawPath(destArrowPath, shadowPaint)
         canvas.drawPath(destArrowPath, arrowOutlinePaint)
@@ -496,10 +514,10 @@ object MapOverlayRenderer {
         canvas.restore()
 
         // Horizontal upright badge so distance text is always readable on any screen edge
-        val shadowRect = RectF(pillRect.left, pillRect.top + 2f, pillRect.right, pillRect.bottom + 2f)
-        canvas.drawRoundRect(shadowRect, 14f, 14f, shadowPaint)
-        canvas.drawRoundRect(pillRect, 14f, 14f, destBgPaint)
-        canvas.drawRoundRect(pillRect, 14f, 14f, destBorderStrokePaint)
+        val shadowRect = RectF(pillRect.left, pillRect.top + 3f, pillRect.right, pillRect.bottom + 3f)
+        canvas.drawRoundRect(shadowRect, 16f, 16f, shadowPaint)
+        canvas.drawRoundRect(pillRect, 16f, 16f, destBgPaint)
+        canvas.drawRoundRect(pillRect, 16f, 16f, destBorderStrokePaint)
 
         val iconLeft = if (distText != null) pillRect.left + padX else centerX - iconW * 0.5f
         val iconTop = centerY - iconH * 0.5f
@@ -507,7 +525,7 @@ object MapOverlayRenderer {
         canvas.drawRect(iconLeft, iconTop, iconLeft + iconW, iconTop + iconH, destFlagOutlinePaint)
 
         if (distText != null) {
-            val textX = iconLeft + iconW + 8f
+            val textX = iconLeft + iconW + iconGap
             val baselineY = centerY - (destTextPaint.descent() + destTextPaint.ascent()) * 0.5f
             canvas.drawText(distText, textX, baselineY, destTextPaint)
         }
