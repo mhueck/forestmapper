@@ -49,6 +49,8 @@ class GeoPdfMapView @JvmOverloads constructor(
         }
     )
 
+    private var hadMultiTouch = false
+
     private val gestureDetector = GestureDetector(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
@@ -69,6 +71,15 @@ class GeoPdfMapView @JvmOverloads constructor(
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 mapController.zoomBy(1.6f, e.x, e.y)
                 return true
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                if (hadMultiTouch || isScaling) return
+                val set = mapController.setDestinationAtScreenPoint(e.x, e.y)
+                if (set != null) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    invalidate()
+                }
             }
         }
     )
@@ -92,24 +103,28 @@ class GeoPdfMapView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> hadMultiTouch = false
+            MotionEvent.ACTION_POINTER_DOWN -> hadMultiTouch = true
+            MotionEvent.ACTION_MOVE -> if (event.pointerCount > 1) hadMultiTouch = true
+        }
         val scaleHandled = scaleGestureDetector.onTouchEvent(event)
         val gestureHandled = gestureDetector.onTouchEvent(event)
         return scaleHandled || gestureHandled || super.onTouchEvent(event)
     }
 
-    private var overlayLeftInsetPx: Int = 0
-    private var overlayBottomInsetPx: Int = 0
+    private var overlayInsets: com.mapper.geopdf.geo.OverlayInsets =
+        com.mapper.geopdf.geo.OverlayInsets()
 
-    fun setOverlayInsets(leftPx: Int, bottomPx: Int) {
-        if (overlayLeftInsetPx != leftPx || overlayBottomInsetPx != bottomPx) {
-            overlayLeftInsetPx = leftPx
-            overlayBottomInsetPx = bottomPx
+    fun setOverlayInsets(insets: com.mapper.geopdf.geo.OverlayInsets) {
+        if (overlayInsets != insets) {
+            overlayInsets = insets
             invalidate()
         }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        mapController.renderToCanvas(canvas, width, height, overlayLeftInsetPx, overlayBottomInsetPx)
+        mapController.renderToCanvas(canvas, width, height, overlayInsets)
     }
 }

@@ -11,6 +11,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -83,6 +84,11 @@ class MainActivity : AppCompatActivity() {
         checkAndRequestLocationPermissions()
     }
 
+    private var lastSystemBarsLeft = 0
+    private var lastSystemBarsTop = 0
+    private var lastSystemBarsRight = 0
+    private var lastSystemBarsBottom = 0
+
     private fun applyWindowInsets() {
         val topLp = binding.topControlBar.layoutParams as ViewGroup.MarginLayoutParams
         val baseTop = topLp.topMargin
@@ -111,10 +117,59 @@ class MainActivity : AppCompatActivity() {
             }
             binding.bottomControls.requestLayout()
 
-            binding.mapView.setOverlayInsets(leftPx = bars.left, bottomPx = bars.bottom)
+            lastSystemBarsLeft = bars.left
+            lastSystemBarsTop = bars.top
+            lastSystemBarsRight = bars.right
+            lastSystemBarsBottom = bars.bottom
+            updateMapOverlayInsets()
             windowInsets
         }
+        binding.topControlBar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateMapOverlayInsets()
+        }
+        binding.bottomControls.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateMapOverlayInsets()
+        }
+        binding.mapView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateMapOverlayInsets()
+        }
         ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun updateMapOverlayInsets() {
+        val mapTop = binding.mapView.top
+        val mapLeft = binding.mapView.left
+        val topControlBottom = if (binding.topControlBar.visibility == android.view.View.VISIBLE &&
+            binding.topControlBar.height > 0
+        ) {
+            (binding.topControlBar.bottom - mapTop).coerceAtLeast(0)
+        } else {
+            0
+        }
+        val excluded = if (binding.bottomControls.visibility == android.view.View.VISIBLE &&
+            binding.bottomControls.width > 0 &&
+            binding.bottomControls.height > 0
+        ) {
+            listOf(
+                com.mapper.geopdf.geo.ScreenBounds(
+                    left = (binding.bottomControls.left - mapLeft).toFloat(),
+                    top = (binding.bottomControls.top - mapTop).toFloat(),
+                    right = (binding.bottomControls.right - mapLeft).toFloat(),
+                    bottom = (binding.bottomControls.bottom - mapTop).toFloat()
+                )
+            )
+        } else {
+            emptyList()
+        }
+        binding.mapView.setOverlayInsets(
+            com.mapper.geopdf.geo.OverlayInsets(
+                leftPx = lastSystemBarsLeft,
+                topPx = maxOf(lastSystemBarsTop, topControlBottom),
+                rightPx = lastSystemBarsRight,
+                bottomPx = lastSystemBarsBottom,
+                excludedRects = excluded
+            )
+        )
     }
 
     override fun onStart() {
@@ -156,6 +211,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnCancelDownload.setOnClickListener {
             mapController.cancelActiveDownload()
         }
+
+        binding.btnClearDestination.setOnClickListener {
+            mapController.clearDestination()
+        }
     }
 
     private fun observeState() {
@@ -194,8 +253,54 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         getString(R.string.sim_gps)
                     }
+
+                    val dest = state.destination
+                    updateKeepScreenOn(state.shouldKeepScreenOn)
+                    if (dest != null) {
+                        binding.layoutDestinationBar.visibility = android.view.View.VISIBLE
+                        val gps = state.gpsPosition
+                        val distText = if (gps != null) {
+                            val meters = com.mapper.geopdf.geo.MapScaleFormatter.haversineMeters(
+                                gps.latitude,
+                                gps.longitude,
+                                dest.latitude,
+                                dest.longitude
+                            )
+                            com.mapper.geopdf.geo.MapScaleFormatter.formatDistanceMeters(
+                                meters,
+                                state.distanceUnit
+                            )
+                        } else {
+                            null
+                        }
+                        val coords = String.format(
+                            java.util.Locale.US,
+                            "%.4f, %.4f",
+                            dest.latitude,
+                            dest.longitude
+                        )
+                        binding.tvDestinationSummary.text = if (distText != null) {
+                            "Dest: $distText ($coords)"
+                        } else {
+                            "Dest: $coords"
+                        }
+                    } else {
+                        binding.layoutDestinationBar.visibility = android.view.View.GONE
+                    }
+                    binding.mapView.invalidate()
                 }
             }
+        }
+    }
+
+    private fun updateKeepScreenOn(keepOn: Boolean) {
+        val currentlyOn =
+            (window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        if (keepOn == currentlyOn) return
+        if (keepOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 

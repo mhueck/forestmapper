@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import com.mapper.geopdf.geo.DistanceUnit
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
 import com.mapper.geopdf.geo.GeoPdfParser
+import com.mapper.geopdf.geo.MapDestination
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -280,6 +281,8 @@ class MapDownloadManager(
         private const val KEY_AUTO_DOWNLOAD = "auto_download_enabled"
         private const val KEY_WIFI_ONLY = "wifi_only_download"
         private const val KEY_DISTANCE_UNIT = "distance_unit"
+        private const val KEY_DEST_LAT = "destination_lat"
+        private const val KEY_DEST_LON = "destination_lon"
         private const val KEY_CATALOG_PREFIX = "catalog_"
         private const val KEY_PINNED_PREFIX = "pinned_"
         private const val KEY_AUTO_PREFIX = "auto_"
@@ -318,6 +321,9 @@ class MapDownloadManager(
     )
     val distanceUnit: StateFlow<DistanceUnit> = _distanceUnit.asStateFlow()
 
+    private val _destination = MutableStateFlow(readPersistedDestination())
+    val destination: StateFlow<MapDestination?> = _destination.asStateFlow()
+
     suspend fun loadCatalog(): ForestCatalog = withContext(Dispatchers.IO) {
         try {
             appContext.assets.open("forest_catalog.json").use { stream ->
@@ -347,6 +353,29 @@ class MapDownloadManager(
     fun setDistanceUnit(unit: DistanceUnit) {
         prefs.edit().putString(KEY_DISTANCE_UNIT, unit.prefValue).apply()
         _distanceUnit.value = unit
+    }
+
+    fun setDestination(destination: MapDestination) {
+        if (!destination.isValid()) return
+        prefs.edit()
+            .putString(KEY_DEST_LAT, destination.latitude.toString())
+            .putString(KEY_DEST_LON, destination.longitude.toString())
+            .apply()
+        _destination.value = destination
+    }
+
+    fun clearDestination() {
+        prefs.edit()
+            .remove(KEY_DEST_LAT)
+            .remove(KEY_DEST_LON)
+            .apply()
+        _destination.value = null
+    }
+
+    private fun readPersistedDestination(): MapDestination? {
+        val lat = prefs.getString(KEY_DEST_LAT, null)?.toDoubleOrNull() ?: return null
+        val lon = prefs.getString(KEY_DEST_LON, null)?.toDoubleOrNull() ?: return null
+        return MapDestination(lat, lon).takeIf { it.isValid() }
     }
 
     fun checkNetworkEligibility(): NetworkEligibility {

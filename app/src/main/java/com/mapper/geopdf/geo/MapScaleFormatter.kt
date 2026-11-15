@@ -2,6 +2,7 @@ package com.mapper.geopdf.geo
 
 import java.util.Locale
 import kotlin.math.asin
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -131,6 +132,29 @@ object MapScaleFormatter {
         }
     }
 
+    /**
+     * Formats a ground distance in meters for live navigation/guidance displays in metric
+     * (m / km) or imperial (ft / mi).
+     */
+    fun formatDistanceMeters(meters: Double, unit: DistanceUnit): String {
+        val safeMeters = meters.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: return ""
+        return when (unit) {
+            DistanceUnit.KILOMETERS -> when {
+                safeMeters < 1000.0 -> "${safeMeters.roundToInt()} m"
+                safeMeters < 100_000.0 -> String.format(Locale.US, "%.1f km", safeMeters / 1000.0)
+                else -> String.format(Locale.US, "%.0f km", safeMeters / 1000.0)
+            }
+            DistanceUnit.MILES -> {
+                val miles = safeMeters / METERS_PER_MILE
+                when {
+                    miles < 0.2 -> "${(safeMeters / METERS_PER_FOOT).roundToInt()} ft"
+                    miles < 100.0 -> String.format(Locale.US, "%.1f mi", miles)
+                    else -> String.format(Locale.US, "%.0f mi", miles)
+                }
+            }
+        }
+    }
+
     fun haversineMeters(lat1Deg: Double, lon1Deg: Double, lat2Deg: Double, lon2Deg: Double): Double {
         val lat1 = Math.toRadians(lat1Deg)
         val lat2 = Math.toRadians(lat2Deg)
@@ -141,5 +165,19 @@ object MapScaleFormatter {
         val a = sinDLat * sinDLat + cos(lat1) * cos(lat2) * sinDLon * sinDLon
         val c = 2.0 * asin(sqrt(a.coerceIn(0.0, 1.0)))
         return EARTH_RADIUS_METERS * c
+    }
+
+    /**
+     * Computes forward azimuth in degrees clockwise from true North [0, 360).
+     */
+    fun initialBearingDegrees(lat1Deg: Double, lon1Deg: Double, lat2Deg: Double, lon2Deg: Double): Double {
+        val lat1 = Math.toRadians(lat1Deg)
+        val lat2 = Math.toRadians(lat2Deg)
+        val dLon = Math.toRadians(lon2Deg - lon1Deg)
+        val y = sin(dLon) * cos(lat2)
+        val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        if (x == 0.0 && y == 0.0) return 0.0
+        val deg = Math.toDegrees(atan2(y, x))
+        return (deg % 360.0 + 360.0) % 360.0
     }
 }

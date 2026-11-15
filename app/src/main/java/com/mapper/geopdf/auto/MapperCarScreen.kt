@@ -96,7 +96,8 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
                         mapController.uiState.collect { state ->
                             val dl = state.activeDownload
                             val pctBucket = dl?.progressPercent?.let { (it / 5) * 5 }
-                            val key = "${state.activeMap?.file?.absolutePath}|${state.isFollowingGps}|${dl?.mapId}|$pctBucket"
+                            val hasDest = state.destination != null
+                            val key = "${state.activeMap?.file?.absolutePath}|${state.isFollowingGps}|${dl?.mapId}|$pctBucket|$hasDest"
                             if (key != lastTemplateKey) {
                                 lastTemplateKey = key
                                 invalidate()
@@ -132,11 +133,19 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
             if (!s.isValid || surfaceWidth <= 0 || surfaceHeight <= 0) return
             val area = visibleArea
             val leftInset = area?.left?.takeIf { it in 1..(surfaceWidth / 3) } ?: 0
+            val topInset = area?.top?.takeIf { it in 1..(surfaceHeight / 3) } ?: 0
+            val rightInset = area?.let { surfaceWidth - it.right }?.takeIf { it in 1..(surfaceWidth / 3) } ?: 0
             val bottomInset = area?.let { surfaceHeight - it.bottom }?.takeIf { it in 1..(surfaceHeight / 3) } ?: 0
+            val insets = com.mapper.geopdf.geo.OverlayInsets(
+                leftPx = leftInset,
+                topPx = topInset,
+                rightPx = rightInset,
+                bottomPx = bottomInset
+            )
             try {
                 val canvas = s.lockCanvas(null) ?: return
                 try {
-                    mapController.renderToCanvas(canvas, surfaceWidth, surfaceHeight, leftInset, bottomInset)
+                    mapController.renderToCanvas(canvas, surfaceWidth, surfaceHeight, insets)
                 } finally {
                     s.unlockCanvasAndPost(canvas)
                 }
@@ -182,6 +191,19 @@ class MapperCarScreen(carContext: CarContext) : Screen(carContext) {
                     }
                     .build()
             )
+            .apply {
+                if (state.destination != null) {
+                    addAction(
+                        Action.Builder()
+                            .setTitle("Clear Dest")
+                            .setOnClickListener {
+                                mapController.clearDestination()
+                                invalidate()
+                            }
+                            .build()
+                    )
+                }
+            }
             .build()
 
         // Map Action Strip (max 4 icon buttons for map interaction: Pan, Zoom In, Zoom Out, Re-center)

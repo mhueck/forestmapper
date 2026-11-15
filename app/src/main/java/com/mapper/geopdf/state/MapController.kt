@@ -15,6 +15,8 @@ import com.mapper.geopdf.catalog.NetworkEligibility
 import com.mapper.geopdf.geo.DistanceUnit
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
 import com.mapper.geopdf.geo.GeoPdfParser
+import com.mapper.geopdf.geo.MapDestination
+import com.mapper.geopdf.geo.OverlayInsets
 import com.mapper.geopdf.location.GpsPosition
 import com.mapper.geopdf.location.LocationTracker
 import com.mapper.geopdf.pdf.TiledPdfEngine
@@ -51,8 +53,13 @@ data class MapUiState(
     val activeDownload: ActiveDownload? = null,
     val autoDownloadEnabled: Boolean = true,
     val wifiOnlyDownload: Boolean = false,
-    val distanceUnit: DistanceUnit = DistanceUnit.defaultForLocale()
-)
+    val distanceUnit: DistanceUnit = DistanceUnit.defaultForLocale(),
+    val destination: MapDestination? = null
+) {
+    /** Keep the device screen awake while navigating toward an active destination. */
+    val shouldKeepScreenOn: Boolean
+        get() = destination != null
+}
 
 /**
  * Shared controller coordinating GeoPDF loading, tiled rendering, pan/zoom transforms,
@@ -93,7 +100,8 @@ class MapController(private val appContext: Context) {
         MapUiState(
             autoDownloadEnabled = downloadManager.autoDownloadEnabled.value,
             wifiOnlyDownload = downloadManager.wifiOnlyDownload.value,
-            distanceUnit = downloadManager.distanceUnit.value
+            distanceUnit = downloadManager.distanceUnit.value,
+            destination = downloadManager.destination.value
         )
     )
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
@@ -165,6 +173,15 @@ class MapController(private val appContext: Context) {
             downloadManager.distanceUnit.collect { unit ->
                 if (_uiState.value.distanceUnit != unit) {
                     _uiState.value = _uiState.value.copy(distanceUnit = unit)
+                    notifyRedraw()
+                }
+            }
+        }
+
+        scope.launch {
+            downloadManager.destination.collect { dest ->
+                if (_uiState.value.destination != dest) {
+                    _uiState.value = _uiState.value.copy(destination = dest)
                     notifyRedraw()
                 }
             }
@@ -628,8 +645,7 @@ class MapController(private val appContext: Context) {
         canvas: Canvas,
         width: Int,
         height: Int,
-        overlayLeftInsetPx: Int = 0,
-        overlayBottomInsetPx: Int = 0
+        overlayInsets: OverlayInsets = OverlayInsets()
     ) {
         updateViewportSize(width, height)
         val state = _uiState.value
@@ -648,15 +664,14 @@ class MapController(private val appContext: Context) {
                 offsetY = state.offsetY
             )
 
-            // Draw GPS position marker + movement direction arrow + scale bar
+            // Draw GPS position marker + movement direction arrow + destination + scale bar
             MapOverlayRenderer.drawOverlays(
                 canvas = canvas,
                 viewportWidth = width,
                 viewportHeight = height,
                 mapInfo = activeMap,
                 state = state,
-                extraLeftInsetPx = overlayLeftInsetPx,
-                extraBottomInsetPx = overlayBottomInsetPx
+                insets = overlayInsets
             )
         } else {
             MapOverlayRenderer.drawEmptyState(
@@ -697,6 +712,39 @@ class MapController(private val appContext: Context) {
 
     fun setDistanceUnit(unit: DistanceUnit) {
         downloadManager.setDistanceUnit(unit)
+    }
+
+    /**
+     * Converts a long-pressed screen coordinate into geographic (latitude, longitude) on the
+     * active GeoPDF page and persists it as the active destination.
+     */
+    fun setDestinationAtScreenPoint(screenX: Float, screenY: Float): MapDestination? {
+        val cur = _uiState.value
+        val map = cur.activeMap ?: return null
+        if (cur.scale <= 0f) return null
+
+        val pageX = (screenX - cur.offsetX) / cur.scale
+        val pageY = (screenY - cur.offsetY) / cur.scale
+        if (pageX !in 0f..map.pageWidthPt || pageY !in 0f..map.pageHeightPt) {
+            return null
+        }
+
+        val (lat, lon) = map.primaryViewport.pageToLatLon(pageX, pageY)
+        val dest = MapDestination(lat, lon)
+        if (!dest.isValid()) return null
+
+        downloadManager.setDestination(dest)
+        _uiState.value = _uiState.value.copy(destination = dest)
+        notifyRedraw()
+        return dest
+    }
+
+    fun clearDestination() {
+        downloadManager.clearDestination()
+        if (_uiState.value.destination != null) {
+            _uiState.value = _uiState.value.copy(destination = null)
+            notifyRedraw()
+        }
     }
 
     fun cancelActiveDownload() {

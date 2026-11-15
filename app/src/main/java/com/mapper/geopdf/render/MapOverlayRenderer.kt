@@ -8,12 +8,19 @@ import android.graphics.RectF
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.mapper.geopdf.geo.DestinationGuidance
+import com.mapper.geopdf.geo.DestinationPlacement
 import com.mapper.geopdf.geo.GeoPdfDocumentInfo
 import com.mapper.geopdf.geo.GeoViewport
+import com.mapper.geopdf.geo.MapDestination
 import com.mapper.geopdf.geo.MapScaleFormatter
+import com.mapper.geopdf.geo.OverlayInsets
+import com.mapper.geopdf.geo.ScreenBounds
 import com.mapper.geopdf.state.MapUiState
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * Renders the local GPS position, directional movement arrow, accuracy halo, and scale bar
@@ -93,7 +100,63 @@ object MapOverlayRenderer {
         color = Color.WHITE
     }
 
+    private val destHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+
+    private val destHaloStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+        color = Color.WHITE
+    }
+
+    private val destDarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(20, 25, 31)
+    }
+
+    private val destDarkStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+        color = Color.rgb(20, 25, 31)
+    }
+
+    private val destFlagOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.8f
+        strokeJoin = Paint.Join.ROUND
+        color = Color.rgb(20, 25, 31)
+    }
+
+    private val destAccentFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.rgb(255, 143, 0)
+    }
+
+    private val destBorderStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.2f
+        color = Color.rgb(255, 143, 0)
+    }
+
+    private val destBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.argb(225, 20, 26, 31)
+    }
+
+    private val destTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 22f
+        isFakeBoldText = true
+    }
+
     private val arrowPath = Path()
+    private val destArrowPath = Path()
     private val scaleBracketPath = Path()
     private val scaleCacheLock = Any()
     private var cachedViewport: GeoViewport? = null
@@ -107,29 +170,42 @@ object MapOverlayRenderer {
         viewportHeight: Int,
         mapInfo: GeoPdfDocumentInfo,
         state: MapUiState,
-        extraLeftInsetPx: Int = 0,
-        extraBottomInsetPx: Int = 0
+        insets: OverlayInsets = OverlayInsets()
     ) {
-        val hudBoxTop = drawGpsOverlaysAndHud(
+        val hudRect = drawGpsOverlaysAndHud(
             canvas = canvas,
             viewportWidth = viewportWidth,
             viewportHeight = viewportHeight,
             mapInfo = mapInfo,
             state = state,
-            extraLeftInsetPx = extraLeftInsetPx,
-            extraBottomInsetPx = extraBottomInsetPx
+            extraLeftInsetPx = insets.leftPx,
+            extraBottomInsetPx = insets.bottomPx
         )
 
-        drawScaleBar(
+        val scaleBarRect = drawScaleBar(
             canvas = canvas,
             viewportWidth = viewportWidth,
             viewportHeight = viewportHeight,
             viewport = mapInfo.primaryViewport,
             state = state,
-            extraLeftInsetPx = extraLeftInsetPx,
-            extraBottomInsetPx = extraBottomInsetPx,
-            hudBoxTop = hudBoxTop
+            extraLeftInsetPx = insets.leftPx,
+            extraBottomInsetPx = insets.bottomPx,
+            hudBoxTop = hudRect?.top
         )
+
+        val destination = state.destination
+        if (destination != null) {
+            val combinedExclusions = insets.excludedRects + listOfNotNull(hudRect, scaleBarRect)
+            drawDestinationOverlay(
+                canvas = canvas,
+                viewportWidth = viewportWidth,
+                viewportHeight = viewportHeight,
+                viewport = mapInfo.primaryViewport,
+                state = state,
+                destination = destination,
+                insets = insets.copy(excludedRects = combinedExclusions)
+            )
+        }
     }
 
     private fun drawGpsOverlaysAndHud(
@@ -140,7 +216,7 @@ object MapOverlayRenderer {
         state: MapUiState,
         extraLeftInsetPx: Int,
         extraBottomInsetPx: Int
-    ): Float? {
+    ): ScreenBounds? {
         val gps = state.gpsPosition ?: return null
         val viewport = mapInfo.primaryViewport
 
@@ -224,7 +300,7 @@ object MapOverlayRenderer {
         canvas.drawRoundRect(rect, 16f, 16f, hudBgPaint)
         canvas.drawText(line1, boxLeft + pad, boxTop + 32f, hudTextPaint)
         canvas.drawText(line2, boxLeft + pad, boxTop + 60f, hudSubTextPaint)
-        return boxTop
+        return ScreenBounds(boxLeft, boxTop, boxRight, boxBottom)
     }
 
     private fun drawScaleBar(
@@ -236,8 +312,8 @@ object MapOverlayRenderer {
         extraLeftInsetPx: Int,
         extraBottomInsetPx: Int,
         hudBoxTop: Float?
-    ) {
-        if (viewportWidth <= 0 || viewportHeight <= 0 || state.scale <= 0f) return
+    ): ScreenBounds? {
+        if (viewportWidth <= 0 || viewportHeight <= 0 || state.scale <= 0f) return null
 
         val safeScale = state.scale.coerceAtLeast(1e-4f)
         val centerPageX = ((viewportWidth * 0.5f - state.offsetX) / safeScale)
@@ -252,18 +328,18 @@ object MapOverlayRenderer {
             groundMetersPerPx = groundMetersPerPx,
             unit = state.distanceUnit,
             maxWidthPx = maxBarWidthPx
-        ) ?: return
+        ) ?: return null
 
         val padX = 16f
         val labelWidth = scaleTextPaint.measureText(spec.label)
         val contentWidth = maxOf(spec.widthPx, labelWidth)
         val pillLeft = 24f + extraLeftInsetPx
         val pillRight = (pillLeft + contentWidth + padX * 2f).coerceAtMost(viewportWidth - 24f)
-        if (pillRight <= pillLeft + padX * 2f) return
+        if (pillRight <= pillLeft + padX * 2f) return null
 
         val pillBottom = hudBoxTop?.let { it - 10f } ?: (viewportHeight - 24f - extraBottomInsetPx)
         val pillTop = pillBottom - 48f
-        if (pillTop < 0f) return
+        if (pillTop < 0f) return null
 
         canvas.drawRoundRect(RectF(pillLeft, pillTop, pillRight, pillBottom), 12f, 12f, hudBgPaint)
 
@@ -282,6 +358,183 @@ object MapOverlayRenderer {
         scaleBracketPath.lineTo(barRight, barBottomY)
         scaleBracketPath.lineTo(barRight, tickTopY)
         canvas.drawPath(scaleBracketPath, scaleLinePaint)
+        return ScreenBounds(pillLeft, pillTop, pillRight, pillBottom)
+    }
+
+    private fun drawDestinationOverlay(
+        canvas: Canvas,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        viewport: GeoViewport,
+        state: MapUiState,
+        destination: MapDestination,
+        insets: OverlayInsets
+    ) {
+        val distText = state.gpsPosition?.let { gps ->
+            val meters = MapScaleFormatter.haversineMeters(
+                gps.latitude,
+                gps.longitude,
+                destination.latitude,
+                destination.longitude
+            )
+            MapScaleFormatter.formatDistanceMeters(meters, state.distanceUnit)
+        }
+
+        val padX = 12f
+        val iconW = 18f
+        val iconH = 13f
+        val pillH = 40f
+        val pillW = if (distText != null) {
+            padX + iconW + 8f + destTextPaint.measureText(distText) + padX
+        } else {
+            40f
+        }
+
+        val placement = DestinationGuidance.computePlacement(
+            destination = destination,
+            viewport = viewport,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            offsetX = state.offsetX,
+            offsetY = state.offsetY,
+            scale = state.scale,
+            insets = insets,
+            pillHalfWidthPx = pillW * 0.5f,
+            pillHalfHeightPx = pillH * 0.5f,
+            arrowClearancePx = 30f
+        ) ?: return
+
+        when (placement) {
+            is DestinationPlacement.VisibleFlag -> {
+                drawCheckeredFlag(canvas, placement.screenX, placement.screenY)
+            }
+            is DestinationPlacement.OffscreenBorder -> {
+                drawOffscreenDestinationBadge(
+                    canvas = canvas,
+                    centerX = placement.badgeCenterX,
+                    centerY = placement.badgeCenterY,
+                    angleDeg = placement.directionAngleDeg,
+                    pillW = pillW,
+                    pillH = pillH,
+                    iconW = iconW,
+                    iconH = iconH,
+                    padX = padX,
+                    distText = distText
+                )
+            }
+        }
+    }
+
+    private fun drawCheckeredFlag(canvas: Canvas, x: Float, y: Float) {
+        // Anchor dot at exact selected map coordinate
+        canvas.drawCircle(x, y + 2f, 6.5f, shadowPaint)
+        canvas.drawCircle(x, y, 6f, destHaloPaint)
+        canvas.drawCircle(x, y, 3.8f, destAccentFillPaint)
+
+        // Small tilted pole + checkered cloth rising above the anchor dot
+        canvas.save()
+        canvas.translate(x, y)
+        canvas.rotate(-6f)
+
+        val poleTopY = -36f
+        canvas.drawLine(0f, -2f, 0f, poleTopY, destHaloStrokePaint)
+        canvas.drawLine(0f, -2f, 0f, poleTopY, destDarkStrokePaint)
+
+        val flagLeft = 1.5f
+        val flagTop = -35f
+        val flagW = 24f
+        val flagH = 16.5f
+
+        val haloRect = RectF(flagLeft - 2f, flagTop - 2f, flagLeft + flagW + 2f, flagTop + flagH + 2f)
+        canvas.drawRoundRect(haloRect, 2.5f, 2.5f, shadowPaint)
+        canvas.drawRoundRect(haloRect, 2.5f, 2.5f, destHaloPaint)
+        drawCheckeredGrid(canvas, flagLeft, flagTop, flagW, flagH, cols = 4, rows = 3)
+        canvas.drawRect(flagLeft, flagTop, flagLeft + flagW, flagTop + flagH, destFlagOutlinePaint)
+
+        // Top finial cap
+        canvas.drawCircle(0f, poleTopY, 3.2f, destHaloPaint)
+        canvas.drawCircle(0f, poleTopY, 2f, destDarkPaint)
+        canvas.restore()
+    }
+
+    private fun drawOffscreenDestinationBadge(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        angleDeg: Float,
+        pillW: Float,
+        pillH: Float,
+        iconW: Float,
+        iconH: Float,
+        padX: Float,
+        distText: String?
+    ) {
+        val halfW = pillW * 0.5f
+        val halfH = pillH * 0.5f
+        val pillRect = RectF(centerX - halfW, centerY - halfH, centerX + halfW, centerY + halfH)
+
+        // Directional pointer orbiting outside the horizontal badge along angleDeg
+        val rad = Math.toRadians(angleDeg.toDouble())
+        val ux = sin(rad).toFloat()
+        val uy = (-cos(rad)).toFloat()
+        val tx = if (abs(ux) > 1e-4f) halfW / abs(ux) else Float.MAX_VALUE
+        val ty = if (abs(uy) > 1e-4f) halfH / abs(uy) else Float.MAX_VALUE
+        val edgeDist = minOf(tx, ty)
+
+        canvas.save()
+        canvas.translate(centerX, centerY)
+        canvas.rotate(angleDeg)
+        destArrowPath.reset()
+        destArrowPath.moveTo(0f, -(edgeDist + 24f))
+        destArrowPath.lineTo(10.5f, -(edgeDist + 4f))
+        destArrowPath.lineTo(0f, -(edgeDist + 8.5f))
+        destArrowPath.lineTo(-10.5f, -(edgeDist + 4f))
+        destArrowPath.close()
+        canvas.drawPath(destArrowPath, shadowPaint)
+        canvas.drawPath(destArrowPath, arrowOutlinePaint)
+        canvas.drawPath(destArrowPath, destAccentFillPaint)
+        canvas.restore()
+
+        // Horizontal upright badge so distance text is always readable on any screen edge
+        val shadowRect = RectF(pillRect.left, pillRect.top + 2f, pillRect.right, pillRect.bottom + 2f)
+        canvas.drawRoundRect(shadowRect, 14f, 14f, shadowPaint)
+        canvas.drawRoundRect(pillRect, 14f, 14f, destBgPaint)
+        canvas.drawRoundRect(pillRect, 14f, 14f, destBorderStrokePaint)
+
+        val iconLeft = if (distText != null) pillRect.left + padX else centerX - iconW * 0.5f
+        val iconTop = centerY - iconH * 0.5f
+        drawCheckeredGrid(canvas, iconLeft, iconTop, iconW, iconH, cols = 4, rows = 3)
+        canvas.drawRect(iconLeft, iconTop, iconLeft + iconW, iconTop + iconH, destFlagOutlinePaint)
+
+        if (distText != null) {
+            val textX = iconLeft + iconW + 8f
+            val baselineY = centerY - (destTextPaint.descent() + destTextPaint.ascent()) * 0.5f
+            canvas.drawText(distText, textX, baselineY, destTextPaint)
+        }
+    }
+
+    private fun drawCheckeredGrid(
+        canvas: Canvas,
+        left: Float,
+        top: Float,
+        width: Float,
+        height: Float,
+        cols: Int,
+        rows: Int
+    ) {
+        canvas.drawRect(left, top, left + width, top + height, destHaloPaint)
+        val cellW = width / cols
+        val cellH = height / rows
+        for (r in 0 until rows) {
+            val cellTop = top + r * cellH
+            val cellBottom = cellTop + cellH
+            for (c in 0 until cols) {
+                if ((r + c) % 2 == 0) {
+                    val cellLeft = left + c * cellW
+                    canvas.drawRect(cellLeft, cellTop, cellLeft + cellW, cellBottom, destDarkPaint)
+                }
+            }
+        }
     }
 
     private fun resolveGroundMetersPerPoint(
